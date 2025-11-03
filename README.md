@@ -346,6 +346,21 @@
         .success { background: #28a745; }
         .error { background: #dc3545; }
         .info { background: #17a2b8; }
+
+        .connection-status {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            background: #28a745;
+            color: white;
+        }
+
+        .connection-status.offline {
+            background: #dc3545;
+        }
     </style>
 </head>
 <body>
@@ -357,6 +372,9 @@
                 <p>Мультиплеерная викторина</p>
                 <input type="text" class="login-input" id="usernameInput" placeholder="Ваш логин" maxlength="15">
                 <button class="login-btn" onclick="login()">Присоединиться к игре</button>
+                <div class="admin-hint">
+                    💡 Для входа в режим администратора введите логин: <strong>admin123</strong>
+                </div>
                 <div style="margin-top: 20px; font-size: 14px; color: #666;">
                     <p>📢 Откройте эту страницу на нескольких устройствах для мультиплеера</p>
                 </div>
@@ -444,23 +462,29 @@
 
         <!-- Уведомление -->
         <div class="notification" id="notification"></div>
+        
+        <!-- Статус подключения -->
+        <div class="connection-status" id="connectionStatus">🟢 Синхронизировано</div>
     </div>
 
     <script>
         // ========== КОНФИГУРАЦИЯ ИГРЫ ==========
         const CONFIG = {
-            fieldSize: 10, // 10x10 пикселей
-            pixelSize: 60, // размер пикселя на canvas
-            adminLogin: "admin123"
+            fieldSize: 10,
+            pixelSize: 60,
+            adminLogin: "admin123",
+            syncInterval: 1000, // Синхронизация каждую секунду
+            sessionTimeout: 30000 // 30 секунд бездействия = выход
         };
 
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         let currentUser = null;
         let isAdmin = false;
+        let lastActivity = Date.now();
         let gameState = {
             pixels: [],
             players: {},
-            selectedPixel: null
+            version: 1
         };
 
         // ========== ВОПРОСЫ ДЛЯ ВИКТОРИНЫ ==========
@@ -484,80 +508,125 @@
             { q: "Сколько планет в Солнечной системе?", a: "8" },
             { q: "Химический символ золота?", a: "Au" },
             { q: "Сколько минут в часе?", a: "60" },
-            { q: "Столица Германии?", a: "Берлин" },
-            { q: "Сколько дней в неделе?", a: "7" },
-            { q: "Самый большой океан?", a: "Тихий" },
-            { q: "Год полета Гагарина?", a: "1961" },
-            { q: "Сколько букв в русском алфавите?", a: "33" },
-            { q: "Столица России?", a: "Москва" },
-            { q: "Сколько месяцев в году?", a: "12" },
-            { q: "Химический символ кислорода?", a: "O" },
-            { q: "Сколько дней в апреле?", a: "30" },
-            { q: "Самый большой материк?", a: "Евразия" },
-            { q: "Сколько лет в тысячелетии?", a: "1000" },
-            { q: "Столица США?", a: "Вашингтон" },
-            { q: "Сколько сантиметров в метре?", a: "100" },
-            { q: "Химический символ железа?", a: "Fe" },
-            { q: "Сколько дней в ноябре?", a: "30" },
-            { q: "Самая высокая гора?", a: "Эверест" },
-            { q: "Сколько секунд в минуте?", a: "60" },
-            { q: "Столица Китая?", a: "Пекин" },
-            { q: "Сколько грамм в килограмме?", a: "1000" },
-            { q: "Химический символ углерода?", a: "C" },
-            { q: "Сколько дней в феврале високосного года?", a: "29" },
-            { q: "Самая большая пустыня?", a: "Сахара" },
-            { q: "Сколько миллилитров в литре?", a: "1000" },
-            { q: "Столица Канады?", a: "Оттава" },
-            { q: "Сколько сторон у треугольника?", a: "3" },
-            { q: "Химический символ азота?", a: "N" },
-            { q: "Сколько дней в марте?", a: "31" },
-            { q: "Самый большой остров?", a: "Гренландия" },
-            { q: "Сколько минут в двух часах?", a: "120" },
-            { q: "Столица Австралии?", a: "Канберра" },
-            { q: "Сколько градусов в прямом угле?", a: "90" },
-            { q: "Химический символ серебра?", a: "Ag" },
-            { q: "Сколько дней в июле?", a: "31" },
-            { q: "Самое соленое море?", a: "Мертвое" },
-            { q: "Сколько сантиметров в дециметре?", a: "10" },
-            { q: "Столица Бразилии?", a: "Бразилиа" },
-            { q: "Сколько сторон у шестиугольника?", a: "6" },
-            { q: "Химический символ меди?", a: "Cu" },
-            { q: "Сколько дней в сентябре?", a: "30" },
-            { q: "Самый большой лес?", a: "Тайга" },
-            { q: "Сколько миллиметров в сантиметре?", a: "10" },
-            { q: "Столица Индии?", a: "Дели" },
-            { q: "Сколько градусов в окружности?", a: "360" },
-            { q: "Химический символ ртути?", a: "Hg" },
-            { q: "Сколько дней в октябре?", a: "31" },
-            { q: "Самое холодное место на Земле?", a: "Антарктида" },
-            { q: "Сколько килограммов в тонне?", a: "1000" },
-            { q: "Столица Египта?", a: "Каир" },
-            { q: "Сколько сторон у восьмиугольника?", a: "8" },
-            { q: "Химический символ свинца?", a: "Pb" },
-            { q: "Сколько дней в декабре?", a: "31" },
-            { q: "Самый большой вулкан?", a: "Мауна-Лоа" },
-            { q: "Сколько метров в километре?", a: "1000" },
-            { q: "Столица Аргентины?", a: "Буэнос-Айрес" },
-            { q: "Сколько градусов в развернутом угле?", a: "180" },
-            { q: "Химический символ калия?", a: "K" },
-            { q: "Сколько дней в январе?", a: "31" },
-            { q: "Самый большой водопад?", a: "Анхель" },
-            { q: "Столица Мексики?", a: "Мехико" },
-            { q: "Сколько сторон у пятиугольника?", a: "5" },
-            { q: "Химический символ натрия?", a: "Na" },
-            { q: "Сколько дней в августе?", a: "31" },
-            { q: "Самое глубокое море?", a: "Филиппинское" },
-            { q: "Сколько миллиграммов в грамме?", a: "1000" },
-            { q: "Столица Южной Кореи?", a: "Сеул" },
-            { q: "Сколько градусов в острои угле?", a: "меньше 90" },
-            { q: "Химический символ кальция?", a: "Ca" },
-            { q: "Сколько дней в июне?", a: "30" },
-            { q: "Самый большой полуостров?", a: "Аравийский" },
-            { q: "Столица Турции?", a: "Анкара" },
-            { q: "Сколько сторон у семиугольника?", a: "7" },
-            { q: "Химический символ фосфора?", a: "P" },
-            { q: "Сколько дней в мае?", a: "31" }
+            { q: "Столица Германии?", a: "Берлин" }
         ];
+
+        // ========== СИСТЕМА СОХРАНЕНИЯ И СИНХРОНИЗАЦИИ ==========
+        function generateGameId() {
+            return 'game_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function getGameId() {
+            let gameId = localStorage.getItem('pixelQuizGameId');
+            if (!gameId) {
+                gameId = generateGameId();
+                localStorage.setItem('pixelQuizGameId', gameId);
+            }
+            return gameId;
+        }
+
+        function saveGameState() {
+            const gameId = getGameId();
+            const stateToSave = {
+                ...gameState,
+                lastUpdated: Date.now(),
+                gameId: gameId
+            };
+            localStorage.setItem('pixelQuizGameState', JSON.stringify(stateToSave));
+            updateConnectionStatus(true);
+        }
+
+        function loadGameState() {
+            const saved = localStorage.getItem('pixelQuizGameState');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    const currentGameId = getGameId();
+                    
+                    // Загружаем только если это та же игра
+                    if (parsed.gameId === currentGameId) {
+                        gameState = parsed;
+                        
+                        // Очищаем неактивных игроков
+                        const now = Date.now();
+                        Object.keys(gameState.players).forEach(username => {
+                            const player = gameState.players[username];
+                            if (now - player.lastActivity > CONFIG.sessionTimeout && !player.isAdmin) {
+                                delete gameState.players[username];
+                            }
+                        });
+                        
+                        console.log('Состояние игры загружено');
+                        return true;
+                    }
+                } catch (e) {
+                    console.log('Ошибка загрузки состояния');
+                }
+            }
+            
+            // Если нет сохраненной игры или ошибка - создаем новую
+            initializeGame();
+            return false;
+        }
+
+        function updateActivity() {
+            lastActivity = Date.now();
+            if (currentUser && gameState.players[currentUser]) {
+                gameState.players[currentUser].lastActivity = lastActivity;
+                saveGameState();
+            }
+        }
+
+        function setupMultiplayer() {
+            // Загружаем состояние при старте
+            if (!loadGameState()) {
+                initializeGame();
+            }
+            
+            // Слушаем изменения в localStorage
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'pixelQuizGameState') {
+                    console.log('Обнаружено изменение состояния игры');
+                    const oldVersion = gameState.version;
+                    loadGameState();
+                    
+                    if (gameState.version !== oldVersion) {
+                        updateGameInterface();
+                        updateConnectionStatus(true);
+                    }
+                }
+            });
+            
+            // Периодически сохраняем и синхронизируем
+            setInterval(() => {
+                saveGameState();
+                updateActivity();
+                
+                // Проверяем неактивных игроков
+                const now = Date.now();
+                Object.keys(gameState.players).forEach(username => {
+                    const player = gameState.players[username];
+                    if (now - player.lastActivity > CONFIG.sessionTimeout && !player.isAdmin) {
+                        delete gameState.players[username];
+                    }
+                });
+                
+            }, CONFIG.syncInterval);
+            
+            // Обновляем интерфейс каждые 2 секунды
+            setInterval(updateGameInterface, 2000);
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            if (connected) {
+                status.textContent = '🟢 Синхронизировано';
+                status.className = 'connection-status';
+            } else {
+                status.textContent = '🔴 Нет связи';
+                status.className = 'connection-status offline';
+            }
+        }
 
         // ========== ФУНКЦИИ УВЕДОМЛЕНИЙ ==========
         function showNotification(message, type = 'info') {
@@ -568,58 +637,6 @@
             setTimeout(() => {
                 notification.classList.remove('show');
             }, 3000);
-        }
-
-        // ========== СИСТЕМА СОХРАНЕНИЯ ==========
-        function saveGameState() {
-            localStorage.setItem('pixelQuizGameState', JSON.stringify(gameState));
-        }
-
-        function loadGameState() {
-            const saved = localStorage.getItem('pixelQuizGameState');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    gameState = parsed;
-                    
-                    // Очищаем старых игроков (тех, кто не онлайн)
-                    const now = new Date();
-                    Object.keys(gameState.players).forEach(username => {
-                        const player = gameState.players[username];
-                        // Удаляем игроков, которые не админы и не активны
-                        if (player.username !== CONFIG.adminLogin) {
-                            delete gameState.players[username];
-                        }
-                    });
-                    
-                    console.log('Состояние игры загружено, старые игроки очищены');
-                } catch (e) {
-                    console.log('Ошибка загрузки состояния, создаем новую игру');
-                    initializeGame();
-                }
-            } else {
-                console.log('Сохраненного состояния нет, создаем новую игру');
-                initializeGame();
-            }
-        }
-
-        function setupMultiplayer() {
-            // Загружаем состояние при старте
-            loadGameState();
-            
-            // Слушаем изменения в localStorage
-            window.addEventListener('storage', function(e) {
-                if (e.key === 'pixelQuizGameState') {
-                    console.log('Обнаружено изменение состояния игры');
-                    loadGameState();
-                    if (currentUser) {
-                        updateGameInterface();
-                    }
-                }
-            });
-            
-            // Периодически сохраняем состояние
-            setInterval(saveGameState, 1000);
         }
 
         // ========== АВТОРИЗАЦИЯ ==========
@@ -638,33 +655,53 @@
             currentUser = username;
             isAdmin = (username === CONFIG.adminLogin);
             
-            // Инициализируем игру при первом входе
-            if (Object.keys(gameState.players).length === 0) {
-                initializeGame();
-            }
-
-            // Регистрируем игрока (только если не админ)
-            if (!gameState.players[username] && !isAdmin) {
+            // Регистрируем игрока
+            if (!gameState.players[username]) {
                 gameState.players[username] = {
                     id: username,
                     name: username,
                     score: 0,
-                    isAdmin: false,
-                    joinedAt: new Date()
+                    isAdmin: isAdmin,
+                    joinedAt: new Date(),
+                    lastActivity: Date.now()
                 };
                 
-                showNotification(`Добро пожаловать, ${username}!`, 'success');
-            } else if (isAdmin) {
-                showNotification(`Администратор ${username} вошел в систему`, 'success');
+                if (isAdmin) {
+                    showNotification(`Администратор ${username} вошел в систему`, 'success');
+                } else {
+                    showNotification(`Добро пожаловать, ${username}!`, 'success');
+                }
+            } else {
+                // Обновляем активность существующего игрока
+                gameState.players[username].lastActivity = Date.now();
+                showNotification(`С возвращением, ${username}!`, 'success');
             }
+
+            // Сохраняем пользователя в localStorage для автовхода
+            localStorage.setItem('pixelQuizCurrentUser', username);
+
+            // Увеличиваем версию для синхронизации
+            gameState.version++;
 
             // Сохраняем состояние
             saveGameState();
 
             // Показываем игровой экран
+            showGameScreen();
+        }
+
+        function autoLogin() {
+            const savedUser = localStorage.getItem('pixelQuizCurrentUser');
+            if (savedUser) {
+                document.getElementById('usernameInput').value = savedUser;
+                login();
+            }
+        }
+
+        function showGameScreen() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
-            document.getElementById('userName').textContent = username;
+            document.getElementById('userName').textContent = currentUser;
 
             // Показываем/скрываем админ панель
             if (isAdmin) {
@@ -685,9 +722,13 @@
                 // Удаляем игрока из списка (кроме админа)
                 if (!isAdmin) {
                     delete gameState.players[currentUser];
+                    gameState.version++;
+                    saveGameState();
                 }
-                saveGameState();
             }
+            
+            // Очищаем данные автовхода
+            localStorage.removeItem('pixelQuizCurrentUser');
             
             currentUser = null;
             isAdmin = false;
@@ -721,7 +762,8 @@
             }
             
             gameState.players = {};
-            gameState.selectedPixel = null;
+            gameState.version = 1;
+            gameState.gameId = getGameId();
             
             saveGameState();
         }
@@ -779,6 +821,8 @@
         document.getElementById('gameCanvas').addEventListener('click', function(e) {
             if (!currentUser) return;
 
+            updateActivity();
+
             const canvas = this;
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -835,6 +879,9 @@
                 // Обновляем счет игрока
                 gameState.players[currentUser].score++;
                 
+                // Увеличиваем версию для синхронизации
+                gameState.version++;
+                
                 // Сохраняем состояние
                 saveGameState();
                 
@@ -872,7 +919,9 @@
                     pixel.answeredBy = null;
                 }
 
-                drawGameBoard();
+                // Увеличиваем версию для синхронизации
+                gameState.version++;
+                
                 saveGameState();
                 showNotification('✅ Пиксель обновлен', 'success');
             }
@@ -894,8 +943,9 @@
                 player.score = 0;
             });
 
-            drawGameBoard();
-            updateGameInterface();
+            // Увеличиваем версию для синхронизации
+            gameState.version++;
+            
             saveGameState();
             showNotification('✅ Все пиксели сброшены', 'success');
         }
@@ -940,9 +990,14 @@
 
         // Запускаем при загрузке
         window.onload = function() {
-            document.getElementById('usernameInput').focus();
             setupMultiplayer();
+            autoLogin(); // Пробуем автоматический вход
+            document.getElementById('usernameInput').focus();
         };
+
+        // Следим за активностью
+        document.addEventListener('click', updateActivity);
+        document.addEventListener('keypress', updateActivity);
     </script>
 </body>
 </html>
